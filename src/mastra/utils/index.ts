@@ -1,4 +1,4 @@
 import { extractData } from "./extractData";
-import { processChecklistWithFile } from "./openai";
+import { fillPdfWithAI } from "./openai";
 
-export { extractData, processChecklistWithFile };
+export { extractData, fillPdfWithAI };

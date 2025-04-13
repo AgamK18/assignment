@@ -1,59 +1,60 @@
-import OpenAI from "openai";
-import fs from "fs";
-import path from "path";
+const fs = require('fs');
+const { PDFDocument } = require('pdf-lib');
+const { OpenAI } = require('openai');
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export const processChecklistWithFile = async (prompt: string, filePath: string) => {
-  // Upload file
-  const uploadedFile = await openai.files.create({
-    file: fs.createReadStream(filePath),
-    purpose: "assistants",
-  });
+export const fillPdfWithAI = async (data: string, pdfPath: string, outputPdfPath: string) => {
+  const pdfBytes = fs.readFileSync(pdfPath);
+  const pdfDoc = await PDFDocument.load(pdfBytes);
+  const pages = pdfDoc.getPages();
 
-  // Create a thread
-  const thread = await openai.beta.threads.create();
+  let pageTexts = [];
 
-  // Send a message to the thread
-  await openai.beta.threads.messages.create(thread.id, {
-    role: "user",
-    content: prompt,
-    file_ids: [uploadedFile.id],
-  });
-
-  // Run the assistant
-  const run = await openai.beta.threads.runs.create(thread.id, {
-    assistant_id: process.env.OPENAI_ASSISTANT_ID!,
-  });
-
-  // Wait for run to complete
-  let runStatus = run.status;
-  while (runStatus === "queued" || runStatus === "in_progress") {
-    await new Promise((resolve) => setTimeout(resolve, 3000));
-    const updatedRun = await openai.beta.threads.runs.retrieve(thread.id, run.id);
-    runStatus = updatedRun.status;
+  for (const page of pages) {
+    const { width, height } = page.getSize();
+    pageTexts.push({ width, height });
   }
 
-  // Get messages from the thread
-  const messages = await openai.beta.threads.messages.list(thread.id);
-  const message = messages.data[0];
+  const prompt = `
+You are given the following PDF structure:
 
-  const fileAttachment = message.content.find(
-    (content) => content.type === "file"
-  ) as { type: "file"; file_id: string } | undefined;
+${JSON.stringify(pageTexts, null, 2)}
 
-  if (!fileAttachment) {
-    throw new Error("No file response from assistant.");
+And the following data to be written into the PDF:
+
+"${data}"
+
+Return a JSON array of objects with this format:
+[{ page: number, x: number, y: number, text: string }]
+
+Only include coordinates for adding the text in appropriate places and not any other text and any notes.
+`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  const match = completion.choices[0].message.content.match(/\[\s*{[\s\S]*?}\s*\]/);
+  const coordinates = match ? JSON.parse(match[0]) : [];
+
+  console.log(coordinates);
+
+  for (const item of coordinates) {
+    const pageIndex = item.page - 1;
+    if (pageIndex < 0 || pageIndex >= pages.length) continue;
+  
+    const page = pages[pageIndex];
+    if (!page || !item.text) continue;
+  
+    page.drawText(item.text, {
+      x: item.x ?? 0,
+      y: item.y ?? 0,
+      size: 12,
+    });
   }
-
-  const fileId = fileAttachment.file_id;
-  const fileData = await openai.files.retrieve(fileId);
-  const fileBuffer = await openai.files.download(fileId);
-
-  const outputPath = path.join("output", fileData.filename || `output_${Date.now()}.pdf`);
-  fs.writeFileSync(outputPath, Buffer.from(await fileBuffer.arrayBuffer()));
-
-  return outputPath;
+  
+  const pdfBytesModified = await pdfDoc.save();
+  fs.writeFileSync(outputPdfPath, pdfBytesModified);
 }

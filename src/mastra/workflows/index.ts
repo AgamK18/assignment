@@ -1,6 +1,6 @@
 import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
-import { extractData, processChecklistWithFile } from "../utils";
+import { extractData, fillPdfWithAI } from "../utils";
 import fs from "fs";
 import path from "path";
 import { kycAgent } from "../agents";
@@ -52,7 +52,7 @@ const informationProcessorStep = new Step({
     const processedData = [];
     for (const [index, doc] of data.entries()) {
       if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, 65000));
+        await new Promise(resolve => setTimeout(resolve, 75000));
       }
 
       const prompt = `Extract the useful information from the given string and convert it to an object and do not include any other text. String ${doc.extractedData}`;
@@ -85,9 +85,10 @@ const mappingStep = new Step({
       throw new Error("No processed data found.");
     }
 
-    const checklistFilePath = path.resolve("checklist.pdf");
-    const prompt = `Add the following data to the corresponding fields in the checklist file 'checklist.pdf'. Data: ${JSON.stringify(processedData)}`;
-    const outputFilePath = await processChecklistWithFile(prompt, checklistFilePath);
+    const checklistFilePath = process.env.CHECKLIST_PDF_PATH || path.join(process.cwd(), 'checklist.pdf');
+    const outputFilePath = process.env.OUTPUT_PDF_PATH || path.join(process.cwd(), 'output.pdf');
+    
+    await fillPdfWithAI(JSON.stringify(processedData), checklistFilePath, outputFilePath);
 
     return {
       outputFilePath,
