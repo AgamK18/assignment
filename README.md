@@ -19,10 +19,12 @@ npm install
 ```
 
 ### 2. Add OpenAI API Key
-Create a .env.development file in the root directory of the project. Add your OpenAI API key like so:
+Create a .env file in the root directory of the project. Add your OpenAI API key like so:
 
 ```
 OPENAI_KEY=your_openai_api_key_here
+CHECKLIST_PDF_PATH={path_to_cloned_repo}/checklist.pdf
+OUTPUT_PDF_PATH={path_to_cloned_repo}/output.pdf
 ```
 
 ### 3. Start the Development Server
