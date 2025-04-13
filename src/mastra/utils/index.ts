@@ -1,4 +1,4 @@
 import { extractData } from "./extractData";
-import { mapping } from "./mapping";
+import { processChecklistWithFile } from "./openai";
 
-export { extractData, mapping };
+export { extractData, processChecklistWithFile };

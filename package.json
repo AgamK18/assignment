@@ -16,6 +16,7 @@
     "@mastra/core": "^0.8.0",
     "mammoth": "^1.9.0",
     "mastra": "^0.4.5",
+    "openai": "^4.93.0",
     "zod": "^3.24.2"
   },
   "devDependencies": {

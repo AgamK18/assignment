@@ -25,6 +25,6 @@ export const kycAgent = new Agent({
 
       and any other information that you think is relevant to the document.
 `,
-  model: openai('gpt-4o-mini'),
+  model: openai('gpt-3.5-turbo'),
   tools: { extractDataTool },
 });

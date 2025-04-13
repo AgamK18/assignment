@@ -1,9 +1,9 @@
 import { Step, Workflow, Mastra } from "@mastra/core";
 import { z } from "zod";
-import { extractData } from "../utils";
+import { extractData, processChecklistWithFile } from "../utils";
+import fs from "fs";
+import path from "path";
 import { kycAgent } from "../agents";
-import fs from 'fs';
-import path from 'path';
 
 const mastra = new Mastra();
 
@@ -16,10 +16,8 @@ const dataExtractorStep = new Step({
     }),
   }),
   execute: async ({ context }) => {
-    const dirPath = context?.getStepResult<{
-      directoryPath: string;
-    }>('trigger')?.directoryPath;
-    
+    const dirPath = context?.getStepResult<{ directoryPath: string }>('trigger')?.directoryPath;
+
     const files = fs.readdirSync(dirPath)
       .filter(file => file.endsWith('.docx') || file.endsWith('.pdf'))
       .map(file => path.join(dirPath, file));
@@ -29,7 +27,7 @@ const dataExtractorStep = new Step({
       const data = await extractData(filePath);
       extractedData.push({
         fileName: path.basename(filePath),
-        extractedData: data
+        extractedData: data,
       });
     }
 
@@ -52,12 +50,15 @@ const informationProcessorStep = new Step({
     }>('extractData')?.extractedData;
 
     const processedData = [];
-    for (const doc of data) {
+    for (const [index, doc] of data.entries()) {
+      if (index > 0) {
+        await new Promise(resolve => setTimeout(resolve, 65000));
+      }
+
       const prompt = `Extract the useful information from the given string and convert it to an object and do not include any other text. String ${doc.extractedData}`;
       const res = await kycAgent.generate(prompt);
-      const responseMessage = res?.response?.messages[0];
-      const responseContent = responseMessage?.content[0];
-      const responseText = responseContent?.text;
+      const responseText = res?.response?.messages?.[0]?.content?.[0]?.text;
+
       processedData.push({
         fileName: doc.fileName,
         processedData: responseText
@@ -67,10 +68,9 @@ const informationProcessorStep = new Step({
     return { processedData };
   },
 });
-
 const mappingStep = new Step({
   id: "mapping",
-  description: "Map the processed data from all documents to the corresponding checklist items",
+  description: "Map processed data to checklist PDF and return filled file",
   inputSchema: z.object({
     data: z.array(z.object({
       fileName: z.string(),
@@ -78,24 +78,23 @@ const mappingStep = new Step({
     })),
   }),
   execute: async ({ context }) => {
-    const input = context.getStepResult("information-processor");
-    
-    const mappedData = [];
-    for (const doc of input.processedData) {
-      const prompt = `Map the given data to the corresponding checklist items do not include any other text. Data ${doc.processedData}`;
-      const res = await kycAgent.generate(prompt);
-      const responseMessage = res?.response?.messages[0];
-      const responseContent = responseMessage?.content[0];
-      const responseText = responseContent?.text;
-      mappedData.push({
-        fileName: doc.fileName,
-        mappedData: responseText
-      });
+    const input = context.getStepResult<{ processedData: Array<{ fileName: string, processedData: string }> }>("information-processor");
+    const processedData = input?.processedData;
+
+    if (!processedData || processedData.length === 0) {
+      throw new Error("No processed data found.");
     }
 
-    return { mappedData };
+    const checklistFilePath = path.resolve("checklist.pdf");
+    const prompt = `Add the following data to the corresponding fields in the checklist file 'checklist.pdf'. Data: ${JSON.stringify(processedData)}`;
+    const outputFilePath = await processChecklistWithFile(prompt, checklistFilePath);
+
+    return {
+      outputFilePath,
+    };
   },
 });
+
 
 const kycWorkflow = new Workflow({
   name: "kyc-workflow",
@@ -104,6 +103,10 @@ const kycWorkflow = new Workflow({
   }),
 });
 
-kycWorkflow.step(dataExtractorStep).then(informationProcessorStep).then(mappingStep).commit();
+kycWorkflow
+  .step(dataExtractorStep)
+  .then(informationProcessorStep)
+  .then(mappingStep)
+  .commit();
 
 export default kycWorkflow;
