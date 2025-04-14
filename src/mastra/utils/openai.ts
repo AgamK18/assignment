@@ -39,7 +39,6 @@ Only include coordinates for adding the text in appropriate places and not any o
   const match = completion.choices[0].message.content.match(/\[\s*{[\s\S]*?}\s*\]/);
   const coordinates = match ? JSON.parse(match[0]) : [];
 
-  console.log(coordinates);
 
   for (const item of coordinates) {
     const pageIndex = item.page - 1;

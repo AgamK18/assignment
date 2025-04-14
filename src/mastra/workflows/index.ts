@@ -5,6 +5,12 @@ import fs from "fs";
 import path from "path";
 import { kycAgent } from "../agents";
 
+// Environment variable configurations
+const ENV = {
+  CHECKLIST_PDF_PATH: process.env.CHECKLIST_PDF_PATH,
+  OUTPUT_PDF_PATH: process.env.OUTPUT_PDF_PATH,
+} as const;
+
 const mastra = new Mastra();
 
 const dataExtractorStep = new Step({
@@ -50,11 +56,7 @@ const informationProcessorStep = new Step({
     }>('extractData')?.extractedData;
 
     const processedData = [];
-    for (const [index, doc] of data.entries()) {
-      if (index > 0) {
-        await new Promise(resolve => setTimeout(resolve, 75000));
-      }
-
+    for (const doc of data) {
       const prompt = `Extract the useful information from the given string and convert it to an object and do not include any other text. String ${doc.extractedData}`;
       const res = await kycAgent.generate(prompt);
       const responseText = res?.response?.messages?.[0]?.content?.[0]?.text;
@@ -84,14 +86,11 @@ const mappingStep = new Step({
     if (!processedData || processedData.length === 0) {
       throw new Error("No processed data found.");
     }
-
-    const checklistFilePath = process.env.CHECKLIST_PDF_PATH || path.join(process.cwd(), 'checklist.pdf');
-    const outputFilePath = process.env.OUTPUT_PDF_PATH || path.join(process.cwd(), 'output.pdf');
     
-    await fillPdfWithAI(JSON.stringify(processedData), checklistFilePath, outputFilePath);
+    await fillPdfWithAI(JSON.stringify(processedData), ENV.CHECKLIST_PDF_PATH, ENV.OUTPUT_PDF_PATH);
 
     return {
-      outputFilePath,
+      outputFilePath: ENV.OUTPUT_PDF_PATH,
     };
   },
 });
