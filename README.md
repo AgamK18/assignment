@@ -38,4 +38,12 @@ npm run dev
 2. Navigate to the workflow section.
 3. Enter the absolute path of the directory containing all the files you want to process.
 
+OR
+
+1. Git clone 'https://github.com/AgamK18/assignment-frontend'
+2. Run npm install
+3. Naviagte to http://localhost:3000
+4. Upload required documents
+5. The generated checklist will be shown on screen
+
 
