@@ -87,10 +87,10 @@ const mappingStep = new Step({
       throw new Error("No processed data found.");
     }
     
-    await fillPdfWithAI(JSON.stringify(processedData), ENV.CHECKLIST_PDF_PATH, ENV.OUTPUT_PDF_PATH);
+    const response = await fillPdfWithAI(JSON.stringify(processedData));
 
     return {
-      outputFilePath: ENV.OUTPUT_PDF_PATH,
+      response,
     };
   },
 });

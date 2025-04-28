@@ -1,59 +1,56 @@
-const fs = require('fs');
-const { PDFDocument } = require('pdf-lib');
-const { OpenAI } = require('openai');
+import fs from 'fs';
+import { PDFDocument } from 'pdf-lib';
+import { OpenAI } from 'openai';
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export const fillPdfWithAI = async (data: string, pdfPath: string, outputPdfPath: string) => {
-  const pdfBytes = fs.readFileSync(pdfPath);
-  const pdfDoc = await PDFDocument.load(pdfBytes);
-  const pages = pdfDoc.getPages();
-
-  let pageTexts = [];
-
-  for (const page of pages) {
-    const { width, height } = page.getSize();
-    pageTexts.push({ width, height });
-  }
-
+export const fillPdfWithAI = async (data: string): Promise<string> => {
   const prompt = `
-You are given the following PDF structure:
+  You are given a checklist and data: ${data}. Perform the following tasks carefully:
+  1. **Extract Information**:
+    - Extract the pertinent information from the provided documents/data corresponding to each checklist item.
+    - Map the extracted information clearly to the respective checklist items.
 
-${JSON.stringify(pageTexts, null, 2)}
+  2. **Director-Specific Information**:
+    - For checklist items related to individual directors or persons (e.g., Name, ID, Nationality, Address, Email, Phone Number, Document Details):
+      - Create a separate table for each director.
+      - Each director's table should list all relevant fields (e.g., Name, ID, Address, Email, Phone, etc.).
 
-And the following data to be written into the PDF:
+  3. **Company-Level Information**:
+    - For general company-level information (e.g., Company Name, Registration Number, Shareholders, Beneficial Owners):
+      - Organize them together in a single company information table.
 
-"${data}"
+  4. **Pending Items**:
+    - Identify and list all checklist items that are still pending (i.e., items for which no corresponding information could be found yet).
+    - Do not assume all information is complete — allow partial filling with missing fields marked clearly as pending.
 
-Return a JSON array of objects with this format:
-[{ page: number, x: number, y: number, text: string }]
+  5. **Handling Updates**:
+    - If additional documents are provided later:
+      - Re-run the extraction.
+      - Update the mapped tables with newly found information.
+      - Provide an updated list of pending items.
 
-Only include coordinates for adding the text in appropriate places and not any other text and any notes.
-`;
+  6. **Traceability**:
+    - For each filled item, link it precisely to its source (e.g., document name, section title, page number, or quoted excerpt).
+    - Make navigation to the source clear and simple.
+
+  ### Output Format:
+
+  #### Company Information Table:
+  | Item                       | Status (Filled/Pending) | Extracted Information | Source (Document ID + Location) |
+
+  #### Director Information Tables:
+  Separate table for each director:
+  | Field                      | Status (Filled/Pending) | Extracted Information | Source (Document ID + Location) |
+
+  #### Pending Items List:
+  List of all checklist items that remain pending. Do not include any other text. Give only relevant information.
+  `;
 
   const completion = await openai.chat.completions.create({
     model: 'gpt-4o-mini',
     messages: [{ role: 'user', content: prompt }],
   });
 
-  const match = completion.choices[0].message.content.match(/\[\s*{[\s\S]*?}\s*\]/);
-  const coordinates = match ? JSON.parse(match[0]) : [];
-
-
-  for (const item of coordinates) {
-    const pageIndex = item.page - 1;
-    if (pageIndex < 0 || pageIndex >= pages.length) continue;
-  
-    const page = pages[pageIndex];
-    if (!page || !item.text) continue;
-  
-    page.drawText(item.text, {
-      x: item.x ?? 0,
-      y: item.y ?? 0,
-      size: 12,
-    });
-  }
-  
-  const pdfBytesModified = await pdfDoc.save();
-  fs.writeFileSync(outputPdfPath, pdfBytesModified);
-}
+  return completion.choices[0].message.content ?? '';
+};
